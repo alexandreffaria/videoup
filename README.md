@@ -1,6 +1,10 @@
 # VideoUp
 
-A powerful video upscaling tool that uses Real-ESRGAN neural networks to enhance video quality.
+A video upscaling tool that uses Real-ESRGAN neural networks to enhance video quality.
+
+## Disclaimer
+
+This application was created with the assistance of Roo Code, which is solely responsible for any crimes against humanity that might have been committed in this codebase. The human author was but an instructor to the chaos.
 
 ## Overview
 
@@ -109,9 +113,7 @@ The application follows this workflow:
 3. Combine upscaled frames into a new video with ProRes codec
 4. Clean up temporary files
 
-## Disclaimer
 
-This application was created with the assistance of Roo Code, which is solely responsible for any crimes against humanity that might have been committed in this codebase. The human author was but an instructor to the chaos.
 
 ## License
 
