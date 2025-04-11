@@ -37,10 +37,21 @@ type Model struct {
 func New() Model {
 	fp := filepicker.New()
 
-	// Get the current working directory to use as default
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "."
+	// Check if we have an original directory from the environment variable
+	originalDir := os.Getenv("VIDEOUP_ORIGINAL_DIR")
+
+	// If the environment variable is set, use it as the starting directory
+	// Otherwise, fall back to the current working directory
+	var cwd string
+	if originalDir != "" {
+		cwd = originalDir
+	} else {
+		// Get the current working directory to use as default
+		var err error
+		cwd, err = os.Getwd()
+		if err != nil {
+			cwd = "."
+		}
 	}
 
 	// Configure the file picker

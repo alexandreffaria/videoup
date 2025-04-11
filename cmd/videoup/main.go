@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"videoup/internal/ffmpeg"
 	"videoup/internal/filepicker"
@@ -17,13 +18,14 @@ import (
 
 type model struct {
 	filepicker      filepicker.Model
-	state           string // "picking", "processing", "upscaling", "combining", "done", "error"
+	state           string // "picking", "processing", "upscaling", "combining", "done", "error", "cleaning"
 	videoPath       string
 	outputDir       string
 	upscaledDir     string
 	outputVideoPath string
 	upscalerOptions upscaler.UpscalerOptions
 	err             error
+	cleanupComplete bool
 }
 
 func initialModel() model {
@@ -55,6 +57,7 @@ func initialModel() model {
 		filepicker:      filepicker.New(),
 		state:           "picking",
 		upscalerOptions: options,
+		cleanupComplete: false,
 	}
 }
 
@@ -204,6 +207,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case combineResultMsg:
 			m.outputVideoPath = msg.outputVideoPath
+			m.state = "cleaning"
+			return m, cleanupTempFiles(m.outputDir, m.upscaledDir)
+		case tea.KeyMsg:
+			if msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+		}
+
+	case "cleaning":
+		// Handle cleanup state
+		switch msg := msg.(type) {
+		case errMsg:
+			// If cleanup fails, just log the error but still proceed to done state
+			fmt.Printf("Warning: Failed to clean up temporary files: %v\n", msg.err)
+			m.state = "done"
+			return m, nil
+		case cleanupResultMsg:
+			m.cleanupComplete = true
 			m.state = "done"
 			return m, nil
 		case tea.KeyMsg:
@@ -251,6 +272,12 @@ func (m model) View() string {
 			ui.FormatInfo("This may take a while depending on the number of frames.") + "\n\n" +
 			"Press Ctrl+C to cancel."
 
+	case "cleaning":
+		return ui.FormatTitle("VideoUp - Cleaning Up") + "\n\n" +
+			ui.FormatInfo("Cleaning up temporary files...") + "\n" +
+			ui.FormatInfo("Removing extracted frames and upscaled frames.") + "\n\n" +
+			"Press Ctrl+C to cancel."
+
 	case "done":
 		// Try to read the video info file
 		infoText := ""
@@ -279,9 +306,17 @@ func (m model) View() string {
 		result := ui.FormatTitle("VideoUp - Processing Complete") + "\n\n" +
 			ui.FormatSuccess("Successfully extracted, upscaled, and combined frames!") + "\n\n" +
 			ui.FormatInfo(fmt.Sprintf("Original video: %s", m.videoPath)) + "\n" +
-			ui.FormatInfo(fmt.Sprintf("Upscaled video: %s", m.outputVideoPath)) + "\n" +
-			ui.FormatInfo(fmt.Sprintf("Original frames: %s", m.outputDir)) + "\n" +
-			ui.FormatInfo(fmt.Sprintf("Upscaled frames: %s", m.upscaledDir)) + "\n\n"
+			ui.FormatInfo(fmt.Sprintf("Upscaled video: %s", m.outputVideoPath)) + "\n"
+
+		// Only show temp directories if cleanup failed
+		if !m.cleanupComplete {
+			result += ui.FormatInfo(fmt.Sprintf("Original frames: %s", m.outputDir)) + "\n" +
+				ui.FormatInfo(fmt.Sprintf("Upscaled frames: %s", m.upscaledDir)) + "\n"
+		} else {
+			result += ui.FormatSuccess("Temporary files have been cleaned up.") + "\n"
+		}
+
+		result += "\n"
 
 		// Add video info if available
 		if infoText != "" {
@@ -320,6 +355,34 @@ type upscaleResultMsg struct {
 
 type combineResultMsg struct {
 	outputVideoPath string
+}
+
+type cleanupResultMsg struct {
+	success bool
+}
+
+// Custom command to clean up temporary files
+func cleanupTempFiles(outputDir, upscaledDir string) tea.Cmd {
+	return func() tea.Msg {
+		// Wait a moment to ensure files are not in use
+		time.Sleep(500 * time.Millisecond)
+
+		// Remove the output directory with original frames
+		err1 := os.RemoveAll(outputDir)
+
+		// Remove the upscaled directory with upscaled frames
+		err2 := os.RemoveAll(upscaledDir)
+
+		// If either removal failed, return an error
+		if err1 != nil {
+			return errMsg{err1}
+		}
+		if err2 != nil {
+			return errMsg{err2}
+		}
+
+		return cleanupResultMsg{success: true}
+	}
 }
 
 func main() {

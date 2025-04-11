@@ -8,6 +8,13 @@ import (
 )
 
 func main() {
+	// Get the original working directory (where the command was run from)
+	originalDir, err := os.Getwd()
+	if err != nil {
+		fmt.Println("Error getting current directory:", err)
+		os.Exit(1)
+	}
+
 	// Get the path to the executable
 	exePath, err := os.Executable()
 	if err != nil {
@@ -25,11 +32,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Run the videoup command
+	// Run the videoup command with the original directory as an environment variable
 	cmd := exec.Command("cmd", "/c", filepath.Join("cmd", "videoup", "videoup.exe"))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
+
+	// Set the original directory as an environment variable
+	cmd.Env = append(os.Environ(), "VIDEOUP_ORIGINAL_DIR="+originalDir)
 
 	err = cmd.Run()
 	if err != nil {
