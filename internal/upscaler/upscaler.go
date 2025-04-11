@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 )
 
@@ -114,10 +115,27 @@ func UpscaleFrames(inputDir, outputDir string, options UpscalerOptions) error {
 	return nil
 }
 
-// getRealesrganPath returns the path to the realesrgan executable
+// getRealesrganPath returns the path to the realesrgan executable based on the OS
 func getRealesrganPath() (string, error) {
-	// Check if the executable is in the realesrgan_win directory
-	exePath := filepath.Join("realesrgan_win", "realesrgan-ncnn-vulkan.exe")
+	var exeName, dirName string
+
+	// Determine executable name and directory based on OS
+	switch runtime.GOOS {
+	case "windows":
+		exeName = "realesrgan-ncnn-vulkan.exe"
+		dirName = "realesrgan_win"
+	case "darwin": // macOS
+		exeName = "realesrgan-ncnn-vulkan"
+		dirName = "realesrgan_mac"
+	case "linux":
+		exeName = "realesrgan-ncnn-vulkan"
+		dirName = "realesrgan_linux"
+	default:
+		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+
+	// Check if the executable is in the OS-specific directory
+	exePath := filepath.Join(dirName, exeName)
 	if _, err := os.Stat(exePath); err == nil {
 		absPath, err := filepath.Abs(exePath)
 		if err != nil {
@@ -127,15 +145,15 @@ func getRealesrganPath() (string, error) {
 	}
 
 	// Check if the executable is in the PATH
-	path, err := exec.LookPath("realesrgan-ncnn-vulkan.exe")
+	path, err := exec.LookPath(exeName)
 	if err == nil {
 		return path, nil
 	}
 
-	return "", fmt.Errorf("realesrgan-ncnn-vulkan.exe not found in realesrgan_win directory or PATH")
+	return "", fmt.Errorf("%s not found in %s directory or PATH", exeName, dirName)
 }
 
-// IsRealesrganInstalled checks if realesrgan is installed
+// IsRealesrganInstalled checks if realesrgan is installed for the current OS
 func IsRealesrganInstalled() bool {
 	_, err := getRealesrganPath()
 	return err == nil

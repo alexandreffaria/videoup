@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 )
 
 func main() {
@@ -33,7 +34,22 @@ func main() {
 	}
 
 	// Run the videoup command with the original directory as an environment variable
-	cmd := exec.Command("cmd", "/c", filepath.Join("cmd", "videoup", "videoup.exe"))
+	var cmd *exec.Cmd
+
+	// Create the command based on the operating system
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", filepath.Join("cmd", "videoup", "videoup.exe"))
+	case "darwin", "linux":
+		execPath := filepath.Join("cmd", "videoup", "videoup")
+		// Make sure the file is executable
+		os.Chmod(execPath, 0755)
+		cmd = exec.Command(execPath)
+	default:
+		fmt.Println("Unsupported operating system:", runtime.GOOS)
+		os.Exit(1)
+	}
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin

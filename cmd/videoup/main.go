@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -402,8 +403,27 @@ func main() {
 
 	// Check if realesrgan is installed
 	if !upscaler.IsRealesrganInstalled() {
-		fmt.Println(ui.FormatError("Error: realesrgan-ncnn-vulkan.exe is not found"))
-		fmt.Println(ui.FormatInfo("Please make sure realesrgan-ncnn-vulkan.exe is in the realesrgan_win directory"))
+		// Get OS-specific directory name
+		var dirName string
+		switch runtime.GOOS {
+		case "windows":
+			dirName = "realesrgan_win"
+		case "darwin": // macOS
+			dirName = "realesrgan_mac"
+		case "linux":
+			dirName = "realesrgan_linux"
+		default:
+			dirName = "realesrgan directory"
+		}
+
+		// Get OS-specific executable name
+		exeName := "realesrgan-ncnn-vulkan"
+		if runtime.GOOS == "windows" {
+			exeName += ".exe"
+		}
+
+		fmt.Println(ui.FormatError(fmt.Sprintf("Error: %s is not found", exeName)))
+		fmt.Println(ui.FormatInfo(fmt.Sprintf("Please make sure %s is in the %s directory", exeName, dirName)))
 		os.Exit(1)
 	}
 
