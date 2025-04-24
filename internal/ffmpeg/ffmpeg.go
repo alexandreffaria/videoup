@@ -150,7 +150,12 @@ func GetVideoInfo(videoPath string) (*VideoInfo, error) {
 	}
 
 	// Add current time
-	info.ExtractedTime = fmt.Sprintf("%s", time.Now().Format(time.RFC3339))
+	info.ExtractedTime = time.Now().Format(time.RFC3339)
+
+	// Check if scanner encountered any errors
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error scanning ffprobe output: %w", err)
+	}
 
 	return info, nil
 }
