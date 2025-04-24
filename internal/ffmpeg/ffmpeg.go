@@ -205,6 +205,7 @@ func CombineFramesToVideo(framesDir, outputPath string, info *VideoInfo) error {
 	// -framerate: set the frame rate
 	// -i: input file pattern
 	// -c:v: video codec (prores_ks is compatible with Adobe products)
+	//       NOTE: ProRes codec requires a MOV container, not MP4
 	// -profile:v: ProRes profile (3 is ProRes HQ, good balance of quality and size)
 	// -pix_fmt: pixel format (yuv422p10le for ProRes)
 	// -vendor: vendor string
