@@ -70,7 +70,9 @@ Without `--json`, a run on a terminal gets the TUI, or a plain progress line wit
 | `summary` | last line | `done`, `skipped`, `failed`, `outputs` |
 
 `-` (or no paths with a piped stdin) reads paths, one per line, **or videoup's own JSON lines**
-(it takes `source`), so a plan can be filtered and fed back:
+(it takes `source`); blank lines and a leading byte-order mark (Windows PowerShell set to UTF-8
+adds one) are ignored. Any tool that prints paths can feed it, and a plan can be filtered and
+fed back:
 
 ```
 videoup --dry-run gifs      | jq -c "select(.status==\"todo\" and .duration < 10)" | videoup -

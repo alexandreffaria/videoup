@@ -81,7 +81,8 @@ func run() int {
 		sc := bufio.NewScanner(os.Stdin)
 		sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
 		for sc.Scan() {
-			line := strings.TrimSpace(sc.Text())
+			// Windows PowerShell set to UTF-8 starts a pipe with a byte-order mark
+			line := strings.TrimSpace(strings.TrimPrefix(sc.Text(), "\ufeff"))
 			if strings.HasPrefix(line, "{") { // our own JSON lines: take the source
 				var ev map[string]any
 				if json.Unmarshal([]byte(line), &ev) == nil {
