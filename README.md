@@ -4,8 +4,8 @@ AI-upscales videos and GIFs 4x with Real-ESRGAN (`upscayl-bin`, model **High Fid
 returns **one finished file per source**: `<name>_x4.mov`, ProRes 4444, beside the source. The
 output has the same duration and frame rate as the source, the audio stays in sync, and alpha is
 kept. Frames only ever exist in the system temp folder and are removed when the run ends.
-A source with a single frame (a still saved as a GIF) becomes an upscaled `<name>_x4.png`
-instead, not a one-frame movie.
+Images in the folder (PNG, JPG, WebP, BMP, TIFF), and GIFs with a single frame, become an
+upscaled `<name>_x4.png` instead of a one-frame movie.
 
 It ships as **one self-contained binary per OS**. Each binary carries its own upscaler and model,
 so the only thing the machine needs is **ffmpeg** on PATH.
@@ -47,7 +47,8 @@ upscaler stop and temp is removed.
 | `--tile` | auto | lower it if the GPU runs out of memory |
 | `--upscaler` | built in | another `upscayl-bin`, or an Upscayl `resources` folder |
 
-Inputs: `.gif .mov .mp4 .m4v .mkv .webm .avi .mpg .mpeg .mxf .wmv .flv .ts .apng .3gp`.
+Inputs: video and animation `.gif .mov .mp4 .m4v .mkv .webm .avi .mpg .mpeg .mxf .wmv .flv .ts
+.apng .3gp`; images `.png .jpg .jpeg .webp .bmp .tif .tiff`.
 Folders named `to_delete` and files already ending in `_x4` are never picked up, so a second run
 over a folder only does what is new. When `clip.gif` and `clip.mp4` sit side by side, the two
 outputs are named `clip_gif_x4.mov` and `clip_mp4_x4.mov`. Options may come before or after the
@@ -94,8 +95,8 @@ Four stages per file. The **timing map** and the **pipe** carry the mechanism.
      timeline needs one. Each slot of a constant grid shows the frame on screen at that moment,
      the rule of ffmpeg's `fps` filter. The grid is the nearest standard rate to the average, or
      `--vfr-fps`. Duration is unchanged. The `done` event's `rate_note` says when this happened.
-   - **A still saved as a GIF:** GIFs and APNGs have their frames counted at plan time. A
-     single frame skips all of this and is upscaled straight to a PNG.
+   - **Stills:** images, and GIFs or APNGs whose frames counted at plan time come to one, skip
+     all of this. The single frame is upscaled straight to a PNG, alpha included.
 
    Only frames the map uses are upscaled, each once; repeats reuse the upscaled frame.
 

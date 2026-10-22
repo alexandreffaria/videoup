@@ -134,7 +134,7 @@ func (m *tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.sc = scPlan
 		if len(m.jobs) == 0 {
-			m.sc, m.err = scFolder, "no gif or video files in there"
+			m.sc, m.err = scFolder, "no video, gif or image files in there"
 		}
 		return m, nil
 	case eventMsg:

@@ -44,14 +44,20 @@ type Job struct {
 
 var extensions = map[string]bool{".gif": true, ".mov": true, ".mp4": true, ".m4v": true, ".mkv": true,
 	".webm": true, ".avi": true, ".mpg": true, ".mpeg": true, ".mxf": true, ".wmv": true, ".flv": true,
-	".ts": true, ".apng": true, ".3gp": true}
+	".ts": true, ".apng": true, ".3gp": true,
+	".png": true, ".jpg": true, ".jpeg": true, ".webp": true, ".bmp": true, ".tif": true, ".tiff": true}
+
+// images are always stills: upscaled once to <name>_x4.png, whatever their format.
+var images = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true, ".bmp": true,
+	".tif": true, ".tiff": true}
 
 var skipDirs = map[string]bool{"to_delete": true, "_to_delete": true, ".git": true, "node_modules": true}
 
-const usageText = `videoup -- AI-upscale videos and GIFs (Real-ESRGAN via upscayl-bin) into edit-ready files.
+const usageText = `videoup -- AI-upscale videos, GIFs and images (Real-ESRGAN via upscayl-bin) into edit-ready files.
 
 Every source becomes ONE file beside it, <name>_x4.mov (ProRes 4444): same duration and
-frame rate, audio in sync, alpha kept. Frames live only in the system temp folder.
+frame rate, audio in sync, alpha kept. Images and single-frame GIFs become <name>_x4.png.
+Frames live only in the system temp folder.
 
 usage:
   videoup                                   interactive: pick a folder, review, run
@@ -207,7 +213,9 @@ func plan(ctx context.Context, fs []found, o *Options) []*Job {
 			j.Status, j.Error = "unreadable", err.Error()
 		} else {
 			j.Info = info
-			if imageLike[strings.ToLower(filepath.Ext(f.path))] {
+			if images[strings.ToLower(filepath.Ext(f.path))] {
+				info.Still = true
+			} else if imageLike[strings.ToLower(filepath.Ext(f.path))] {
 				if pts, _, err := frameTimes(ctx, f.path); err == nil && len(pts) == 1 {
 					info.Still = true
 				}
