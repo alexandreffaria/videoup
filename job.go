@@ -99,31 +99,49 @@ func process(ctx context.Context, j *Job, o *Options, up Upscaler, report func(P
 		return processStill(ctx, j, o, up, tmp, start)
 	}
 
-	tick("probe")
-	pts, lastDur, err := frameTimes(ctx, j.Source)
-	if err != nil {
-		return nil, err
+	var tm Timing
+	in := []string{"-i", j.Source}
+	frames := 0 // how many source frames extraction should give
+	if j.Seq != nil {
+		// A sequence has no timestamps to read: frame files play 1:1 at --fps, and the
+		// map holds the previous frame over a missing number. ffmpeg reads the files
+		// through a concat list, which takes any names, holes and steps included.
+		tm = Timing{FPS: o.SeqFPS, CFR: true, Map: j.Seq.Map()}
+		list := filepath.Join(tmp, "frames.txt")
+		var b strings.Builder
+		b.WriteString("ffconcat version 1.0\n")
+		for _, p := range j.Seq.Files {
+			b.WriteString("file '" + strings.ReplaceAll(filepath.ToSlash(p), "'", `'\''`) + "'\n")
+		}
+		if err := os.WriteFile(list, []byte(b.String()), 0o644); err != nil {
+			return nil, err
+		}
+		in, frames = []string{"-f", "concat", "-safe", "0", "-i", list}, len(j.Seq.Files)
+	} else {
+		tick("probe")
+		pts, lastDur, err := frameTimes(ctx, j.Source)
+		if err != nil {
+			return nil, err
+		}
+		tm, frames = planTiming(j.Info, pts, lastDur, o.VFRFPS), len(pts)
 	}
-	tm := planTiming(j.Info, pts, lastDur, o.VFRFPS)
 
 	tick("extract")
 	lo := filepath.Join(tmp, "src")
 	os.Mkdir(lo, 0o755)
-	pix := "rgb24"
-	if j.Info.Alpha {
-		pix = "rgba"
-	}
-	if out, err := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-v", "error", "-i", j.Source, "-map", "0:v:0",
-		passthroughFlag(), "passthrough", "-pix_fmt", pix, "-start_number", "0",
-		filepath.Join(lo, "%08d.png")).CombinedOutput(); err != nil {
+	args := append([]string{"-nostdin", "-v", "error"}, in...)
+	args = append(args, "-map", "0:v:0", passthroughFlag(), "passthrough")
+	args = append(args, decodeArgs(j)...)
+	args = append(args, "-start_number", "0", filepath.Join(lo, "%08d.png"))
+	if out, err := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("frame extraction failed: %s", tail(string(out), 400))
 	}
 	pngs, _ := filepath.Glob(filepath.Join(lo, "*.png"))
 	if len(pngs) == 0 {
 		return nil, fmt.Errorf("no frames extracted")
 	}
-	if len(pngs) != len(pts) {
-		j.Warnings = append(j.Warnings, fmt.Sprintf("decoded %d frames, timestamps for %d", len(pngs), len(pts)))
+	if len(pngs) != frames {
+		j.Warnings = append(j.Warnings, fmt.Sprintf("decoded %d frames, expected %d", len(pngs), frames))
 		for k, v := range tm.Map {
 			tm.Map[k] = min(v, len(pngs)-1)
 		}
@@ -133,7 +151,7 @@ func process(ctx context.Context, j *Job, o *Options, up Upscaler, report func(P
 
 	// encoder, reading PNGs from a pipe in output order
 	part := filepath.Join(tmp, "out"+codec.Ext)
-	args := []string{"-nostdin", "-v", "error", "-y", "-f", "image2pipe", "-c:v", "png", "-framerate", tm.FPS.RatString()}
+	args = []string{"-nostdin", "-v", "error", "-y", "-f", "image2pipe", "-c:v", "png", "-framerate", tm.FPS.RatString()}
 	if j.Info.Audio > 0 {
 		args = append(args, "-itsoffset", strconv.FormatFloat(tm.VStart-j.Info.Start, 'f', 6, 64))
 	}
@@ -285,12 +303,9 @@ func processStill(ctx context.Context, j *Job, o *Options, up Upscaler, tmp stri
 	in, out := filepath.Join(tmp, "in"), filepath.Join(tmp, "out")
 	os.Mkdir(in, 0o755)
 	os.Mkdir(out, 0o755)
-	pix := "rgb24"
-	if j.Info.Alpha {
-		pix = "rgba"
-	}
-	if b, err := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-v", "error", "-i", j.Source, "-map", "0:v:0",
-		"-frames:v", "1", "-pix_fmt", pix, filepath.Join(in, "frame.png")).CombinedOutput(); err != nil {
+	args := []string{"-nostdin", "-v", "error", "-i", j.Source, "-map", "0:v:0", "-frames:v", "1"}
+	args = append(append(args, decodeArgs(j)...), filepath.Join(in, "frame.png"))
+	if b, err := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("frame extraction failed: %s", tail(string(b), 400))
 	}
 	if err := runUpscaler(ctx, up, o, in, out, tmp, func(int) {}); err != nil {
@@ -309,6 +324,27 @@ func processStill(ctx context.Context, j *Job, o *Options, up Upscaler, tmp stri
 	}
 	return &Result{File: j.Source, Output: j.Output, Width: got.Width, Height: got.Height, Frames: 1,
 		Still: true, Alpha: j.Info.Alpha, Seconds: round3(time.Since(start).Seconds())}, nil
+}
+
+// exrToDisplay is the house transform for scene-linear EXR (DELIVERY.md, "The
+// linear-to-display transform"): the sRGB curve, which is Blender's view transform
+// Standard. Alpha stays premultiplied, exactly as exr2mov delivers it.
+const exrToDisplay = "zscale=tin=linear:min=bt709:pin=bt709:t=iec61966-2-1:m=bt709:p=bt709"
+
+// decodeArgs turns decoded source frames into the 8-bit PNGs the upscaler reads.
+func decodeArgs(j *Job) []string {
+	pix := "rgb24"
+	if j.Info.Alpha {
+		pix = "rgba"
+	}
+	ext := filepath.Ext(j.Source)
+	if j.Seq != nil {
+		ext = j.Seq.Ext
+	}
+	if strings.EqualFold(ext, ".exr") {
+		return []string{"-vf", exrToDisplay + ",format=" + pix}
+	}
+	return []string{"-pix_fmt", pix}
 }
 
 func send(ctx context.Context, ch chan<- batch, b batch) bool {

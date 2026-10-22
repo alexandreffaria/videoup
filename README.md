@@ -4,7 +4,8 @@ AI-upscales videos and GIFs 4x with Real-ESRGAN (`upscayl-bin`, model **High Fid
 returns **one finished file per source**: `<name>_x4.mov`, ProRes 4444, beside the source. The
 output has the same duration and frame rate as the source, the audio stays in sync, and alpha is
 kept. Frames only ever exist in the system temp folder and are removed when the run ends.
-Images in the folder (PNG, JPG, WebP, BMP, TIFF), and GIFs with a single frame, become an
+A numbered **image sequence** (PNG, JPG, EXR, TIFF, TGA, WebP, BMP: `render_0001.exr ...`)
+becomes one `<name>_x4.mov` at `--fps`. Other images, and GIFs with a single frame, become an
 upscaled `<name>_x4.png` instead of a one-frame movie.
 
 It ships as **one self-contained binary per OS**. Each binary carries its own upscaler and model,
@@ -26,6 +27,8 @@ videoup                                    interactive: pick a folder, review, r
 videoup "D:\footage\gifs"                  review screen for everything under it
 videoup gifs --yes                         straight to work, no review
 videoup clip.mp4 --codec h264              one file, H.264 review copy (.mp4)
+videoup "Render\shot" --fps 25             a frame folder: each sequence in it → one movie
+videoup "Render\shot\shot_####.exr"        one sequence by name, the frame number as #s
 videoup --dry-run gifs                     the plan only
 videoup --list-models                      every model each found upscaler has
 ```
@@ -43,16 +46,28 @@ upscaler stop and temp is removed.
 | `--codec` | `prores4444` | `prores422hq` (no alpha), `h264` (review copy, `.mp4`) |
 | `--out-dir` | beside source | mirror the folder tree somewhere else |
 | `--vfr-fps` | nearest standard | rate for variable-rate sources, e.g. `30` or `30000/1001` |
+| `--fps` | `30` | rate for image sequences, which carry none of their own |
 | `--force` | off | redo sources whose output exists (overwrites it) |
 | `--tile` | auto | lower it if the GPU runs out of memory |
 | `--upscaler` | built in | another `upscayl-bin`, or an Upscayl `resources` folder |
 
 Inputs: video and animation `.gif .mov .mp4 .m4v .mkv .webm .avi .mpg .mpeg .mxf .wmv .flv .ts
-.apng .3gp`; images `.png .jpg .jpeg .webp .bmp .tif .tiff`.
+.apng .3gp`; images `.png .jpg .jpeg .webp .bmp .tif .tiff .exr .tga`.
 Folders named `to_delete` and files already ending in `_x4` are never picked up, so a second run
 over a folder only does what is new. When `clip.gif` and `clip.mp4` sit side by side, the two
-outputs are named `clip_gif_x4.mov` and `clip_mp4_x4.mov`. Options may come before or after the
+outputs are named `clip_gif_x4.mov` and `clip_mp4_x4.mov`; a frame folder holding its own
+`shot.mov` gives `shot_exr_x4.mov` and `shot_mov_x4.mov`. Options may come before or after the
 paths.
+
+**Which images are a sequence.** Images in one folder that share the name before a trailing
+number and the extension are one sequence when there are at least 3 and their numbers step
+evenly, with at most as many missing numbers as frames. So a render with a dropped frame is still
+one movie (the hole holds the frame before it, with a warning), while screenshots named by the
+time they were taken stay separate stills. The movie is named by that shared name without its
+separator (`shot_0001.png` → `shot_x4.mov`), or by the folder when the frames are bare numbers.
+In the plan a sequence's `source` is its pattern, `shot_####.png`, and that pattern is accepted as
+an input, so a filtered plan fed back on stdin keeps its sequences. Name one file of a sequence
+directly and it is upscaled as a still.
 
 ## For scripts and LLMs
 
@@ -85,7 +100,7 @@ missing dependency, `130` interrupted.
 
 Four stages per file. The **timing map** and the **pipe** carry the mechanism.
 
-1. **Frame times** (`probe.go`). ffprobe decodes the video once and lists when each frame is
+1. **Frame times** (`probe.go`; sequences are found in `seq.go`). ffprobe decodes the video once and lists when each frame is
    shown. Duration, rate and sync all derive from that list, never from the container's headline
    rate, which for a GIF is a guess (`david-goggins.gif` holds frames for either 30 or 70 ms).
 
@@ -97,8 +112,18 @@ Four stages per file. The **timing map** and the **pipe** carry the mechanism.
      timeline needs one. Each slot of a constant grid shows the frame on screen at that moment,
      the rule of ffmpeg's `fps` filter. The grid is the nearest standard rate to the average, or
      `--vfr-fps`. Duration is unchanged. The `done` event's `rate_note` says when this happened.
-   - **Stills:** images, and GIFs or APNGs whose frames counted at plan time come to one, skip
-     all of this. The single frame is upscaled straight to a PNG, alpha included.
+   - **Image sequence:** files carry no time, so there is nothing to probe. Each file is one
+     frame at `--fps` (default 30, the house rate), and a missing number repeats the frame before
+     it, so a hole never shortens the shot. ffmpeg reads the files through a concat list, which
+     takes any names, holes and number steps.
+   - **Stills:** other images, and GIFs or APNGs whose frames counted at plan time come to one,
+     skip all of this. The single frame is upscaled straight to a PNG, alpha included.
+
+   **EXR** is scene-linear, and the upscaler needs display pixels, so EXR frames go through
+   `zscale` from linear to the sRGB curve on the way in: Blender's view transform **Standard**,
+   the same transform `exr2mov` uses, so the two agree to about one 8-bit level. Alpha stays
+   premultiplied, as Blender wrote it. An AgX scene comes out flat; for those, upscale PNGs
+   rendered with the view transform baked in. Values above 1.0 clip.
 
    Only frames the map uses are upscaled, each once; repeats reuse the upscaled frame.
 
