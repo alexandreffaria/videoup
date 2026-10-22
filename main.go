@@ -241,7 +241,7 @@ func printPlan(w *os.File, jobs []*Job, o *Options) {
 				fps = fmt.Sprintf("%.4g", f(in.Rate))
 			}
 			if in.Still {
-				fps, size = "still", size+" png"
+				fps, size, dur = "still", size+" png", ""
 			}
 			dur = fmt.Sprintf("%.2f", in.Duration)
 		}
