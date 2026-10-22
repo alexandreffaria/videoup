@@ -1,2 +1,3 @@
-test/
-temp_*
+# fetched and built by `go run ./build`; binaries never go in git
+/assets/
+/dist/

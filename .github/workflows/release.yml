@@ -1,0 +1,26 @@
+name: Release
+
+# Push a tag (git tag v2026.10.22 && git push origin v2026.10.22) to publish the four
+# self-contained binaries as a GitHub Release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -tags noembed ./...
+      - run: go run ./build
+        env:
+          VIDEOUP_VERSION: ${{ github.ref_name }}
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
