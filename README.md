@@ -53,8 +53,10 @@ upscaler stop and temp is removed.
 
 Inputs: video and animation `.gif .mov .mp4 .m4v .mkv .webm .avi .mpg .mpeg .mxf .wmv .flv .ts
 .apng .3gp`; images `.png .jpg .jpeg .webp .bmp .tif .tiff .exr .tga`.
-Folders named `to_delete` and files already ending in `_x4` are never picked up, so a second run
-over a folder only does what is new. When `clip.gif` and `clip.mp4` sit side by side, the two
+Folders named `to_delete` are never scanned. Files in a folder already ending in `_x4` are listed
+as `upscaled` but not picked, so a second run over a folder only does what is new; in the
+interactive picker, select one to upscale it again (to `<name>_x4_x4`), or name the file directly
+on the command line. When `clip.gif` and `clip.mp4` sit side by side, the two
 outputs are named `clip_gif_x4.mov` and `clip_mp4_x4.mov`; a frame folder holding its own
 `shot.mov` gives `shot_exr_x4.mov` and `shot_mov_x4.mov`. Options may come before or after the
 paths.

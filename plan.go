@@ -39,7 +39,7 @@ type Job struct {
 	Source, Output, Root string
 	Seq                  *Sequence // set when the source is a numbered run of frames
 	Info                 *Info
-	Status               string // todo, exists, unreadable
+	Status               string // todo, exists, upscaled, unreadable
 	Error                string
 	Warnings             []string
 }
@@ -151,6 +151,7 @@ func parseArgs(args []string) (*Options, error) {
 type found struct {
 	path, root string
 	seq        *Sequence
+	upscaled   bool // an earlier output found in a folder: listed, not picked
 }
 
 // gather lists every media file in the given paths, recursing into folders. Numbered
@@ -171,7 +172,7 @@ func gather(paths []string, o *Options) ([]found, error) {
 			}
 			if !seen[strings.ToLower(s.Pattern())] {
 				seen[strings.ToLower(s.Pattern())] = true
-				out = append(out, found{s.Pattern(), "", s})
+				out = append(out, found{s.Pattern(), "", s, false})
 			}
 			continue
 		}
@@ -199,25 +200,31 @@ func gather(paths []string, o *Options) ([]found, error) {
 		} else {
 			files = []string{abs}
 		}
-		var media []string
+		var media, upscaled []string
 		for _, f := range files {
-			stem := strings.TrimSuffix(filepath.Base(f), filepath.Ext(f))
-			if !extensions[strings.ToLower(filepath.Ext(f))] || strings.HasSuffix(stem, o.Suffix) ||
-				strings.HasSuffix(f, ".part") || seen[strings.ToLower(f)] {
+			if !extensions[strings.ToLower(filepath.Ext(f))] || strings.HasSuffix(f, ".part") || seen[strings.ToLower(f)] {
 				continue
 			}
 			seen[strings.ToLower(f)] = true
+			// a folder's earlier outputs are listed but left alone; a file named directly is taken
+			if stem := strings.TrimSuffix(filepath.Base(f), filepath.Ext(f)); st.IsDir() && strings.HasSuffix(stem, o.Suffix) {
+				upscaled = append(upscaled, f)
+				continue
+			}
 			media = append(media, f)
 		}
 		if st.IsDir() {
 			var seqs []*Sequence
 			seqs, media = findSequences(media)
 			for _, s := range seqs {
-				out = append(out, found{s.Pattern(), root, s})
+				out = append(out, found{s.Pattern(), root, s, false})
 			}
 		}
 		for _, f := range media {
-			out = append(out, found{f, root, nil})
+			out = append(out, found{f, root, nil, false})
+		}
+		for _, f := range upscaled {
+			out = append(out, found{f, root, nil, true})
 		}
 	}
 	return out, nil
@@ -303,6 +310,8 @@ func plan(ctx context.Context, fs []found, o *Options) []*Job {
 		}
 		if _, err := os.Stat(out); err == nil && !o.Force {
 			j.Status = "exists"
+		} else if fs[i].upscaled {
+			j.Status = "upscaled"
 		}
 		if w, h := j.Info.Width*o.Scale, j.Info.Height*o.Scale; max(w, h) > 8192 {
 			j.Warnings = append(j.Warnings, fmt.Sprintf("output %dx%d is past 8K; consider --scale 2", w, h))

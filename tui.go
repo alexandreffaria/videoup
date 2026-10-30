@@ -283,6 +283,8 @@ func (m *tui) View() string {
 			switch j.Status {
 			case "exists":
 				line += stDim.Render("  (done already)")
+			case "upscaled":
+				line += stDim.Render("  (upscaled output, space to go again)")
 			case "unreadable":
 				line += stErr.Render("  " + j.Error)
 			}

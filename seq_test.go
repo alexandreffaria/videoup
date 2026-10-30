@@ -63,3 +63,19 @@ func TestOpenPattern(t *testing.T) {
 		t.Error("a pattern with no frames should fail")
 	}
 }
+
+func TestGatherUpscaled(t *testing.T) {
+	d := t.TempDir()
+	for _, n := range []string{"clip.mov", "clip_x4.mov"} {
+		os.WriteFile(filepath.Join(d, n), nil, 0o644)
+	}
+	o, _ := parseArgs(nil)
+	fs, err := gather([]string{d}, o)
+	if err != nil || len(fs) != 2 || fs[0].upscaled || !fs[1].upscaled {
+		t.Fatalf("folder: %+v %v", fs, err)
+	}
+	fs, err = gather([]string{filepath.Join(d, "clip_x4.mov")}, o) // named directly: a normal source
+	if err != nil || len(fs) != 1 || fs[0].upscaled {
+		t.Fatalf("file: %+v %v", fs, err)
+	}
+}
